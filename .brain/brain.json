@@ -1,0 +1,61 @@
+{
+    "meta": {
+        "schema_version": "1.1.0",
+        "awf_version": "4.0.0",
+        "updated_at": "2026-02-06T09:48:00Z"
+    },
+    "project": {
+        "name": "auto-accept-agent",
+        "type": "vscode-extension",
+        "status": "active",
+        "description": "VS Code extension tự động click Accept/Run buttons trong Cursor và Antigravity"
+    },
+    "tech_stack": {
+        "runtime": "Node.js",
+        "framework": "VS Code Extension API",
+        "build": "esbuild",
+        "dependencies": [
+            "ws (WebSocket for CDP)"
+        ],
+        "packaging": "@vscode/vsce"
+    },
+    "architecture": {
+        "entry_point": "extension.js",
+        "compiled_output": "dist/extension.js",
+        "browser_script": "main_scripts/full_cdp_script.js",
+        "key_files": [
+            "extension.js - Main activation/deactivation logic",
+            "main_scripts/full_cdp_script.js - Injected browser script, chứa isAcceptButton()",
+            "main_scripts/cdp-handler.js - Chrome DevTools Protocol handler",
+            "settings-panel.js - Pro settings UI"
+        ]
+    },
+    "knowledge_items": {
+        "gotchas": [
+            {
+                "issue": "Extension click dropdown 'Always Run' liên tục",
+                "cause": "Hàm isAcceptButton() trong full_cdp_script.js kiểm tra text chứa 'run' và 'allow' → match dropdown items",
+                "solution": "Thêm dropdownPatterns filter: ['always run', 'always allow', 'always reject', 'ask me', 'never']",
+                "file": "main_scripts/full_cdp_script.js",
+                "line": "~650 (isAcceptButton function)",
+                "date": "2026-02-06"
+            }
+        ],
+        "patterns": [
+            {
+                "name": "Button Detection",
+                "description": "isAcceptButton() uses text matching with accept/reject patterns and visibility checks",
+                "location": "main_scripts/full_cdp_script.js:646-674"
+            }
+        ],
+        "conventions": [
+            "Build với: npx esbuild extension.js --bundle --outfile=dist/extension.js --external:vscode --platform=node --format=cjs",
+            "Package với: npx @vscode/vsce package --no-dependencies",
+            "Workflow có sẵn: .agent/workflows/package-extension.md"
+        ]
+    },
+    "build_commands": {
+        "compile": "C:\\Users\\quangda\\Desktop\\node-v24.13.0-win-x64\\node-v24.13.0-win-x64\\npx.cmd esbuild extension.js --bundle --outfile=dist/extension.js --external:vscode --platform=node --format=cjs",
+        "package": "C:\\Users\\quangda\\Desktop\\node-v24.13.0-win-x64\\node-v24.13.0-win-x64\\npx.cmd @vscode/vsce package --no-dependencies"
+    }
+}
