@@ -20,7 +20,7 @@ var require_settings_panel = __commonJS({
   "settings-panel.js"(exports2, module2) {
     var vscode2 = require("vscode");
     var { STRIPE_LINKS } = require_config();
-    var LICENSE_API2 = "https://auto-accept-backend.onrender.com/api";
+    var LICENSE_API = "https://auto-accept-backend.onrender.com/api";
     var SettingsPanel2 = class _SettingsPanel {
       static currentPanel = void 0;
       static viewType = "autoAcceptSettings";
@@ -762,7 +762,7 @@ var require_settings_panel = __commonJS({
       async checkProStatus(userId) {
         return new Promise((resolve) => {
           const https = require("https");
-          https.get(`${LICENSE_API2}/verify?userId=${userId}`, (res) => {
+          https.get(`${LICENSE_API}/verify?userId=${userId}`, (res) => {
             let data = "";
             res.on("data", (chunk) => data += chunk);
             res.on("end", () => {
@@ -5323,10 +5323,9 @@ var FREQ_STATE_KEY = "auto-accept-frequency";
 var BANNED_COMMANDS_KEY = "auto-accept-banned-commands";
 var ROI_STATS_KEY = "auto-accept-roi-stats";
 var SECONDS_PER_CLICK = 5;
-var LICENSE_API = "https://auto-accept-backend.onrender.com/api";
 var INSTANCE_ID = Math.random().toString(36).substring(7);
 var isEnabled = false;
-var isPro = false;
+var isPro = true;
 var isLockedOut = false;
 var pollFrequency = 2e3;
 var bannedCommands = [];
@@ -5388,7 +5387,7 @@ async function activate(context) {
   }
   try {
     isEnabled = context.globalState.get(GLOBAL_STATE_KEY, false);
-    isPro = context.globalState.get(PRO_STATE_KEY, false);
+    isPro = true;
     if (isPro) {
       pollFrequency = context.globalState.get(FREQ_STATE_KEY, 1e3);
     } else {
@@ -5410,22 +5409,9 @@ async function activate(context) {
       "chmod -R 777 /"
     ];
     bannedCommands = context.globalState.get(BANNED_COMMANDS_KEY, defaultBannedCommands);
-    verifyLicense(context).then((isValid) => {
-      if (isPro !== isValid) {
-        isPro = isValid;
-        context.globalState.update(PRO_STATE_KEY, isValid);
-        log(`License re-verification: Updated Pro status to ${isValid}`);
-        if (cdpHandler && cdpHandler.setProStatus) {
-          cdpHandler.setProStatus(isValid);
-        }
-        if (!isValid) {
-          pollFrequency = 300;
-          if (backgroundModeEnabled) {
-          }
-        }
-        updateStatusBar();
-      }
-    });
+    isPro = true;
+    context.globalState.update(PRO_STATE_KEY, true);
+    log("License check bypassed - Pro unlocked");
     currentIDE = detectIDE();
     outputChannel = vscode.window.createOutputChannel("Auto Accept");
     context.subscriptions.push(outputChannel);
@@ -5591,10 +5577,6 @@ async function handleFrequencyUpdate(context, freq) {
   }
 }
 async function handleBannedCommandsUpdate(context, commands) {
-  if (!isPro) {
-    log("Banned commands customization requires Pro");
-    return;
-  }
   bannedCommands = Array.isArray(commands) ? commands : [];
   await context.globalState.update(BANNED_COMMANDS_KEY, bannedCommands);
   log(`Banned commands updated: ${bannedCommands.length} patterns`);
@@ -5607,18 +5589,6 @@ async function handleBannedCommandsUpdate(context, commands) {
 }
 async function handleBackgroundToggle(context) {
   log("Background toggle clicked");
-  if (!isPro) {
-    vscode.window.showInformationMessage(
-      "Background Mode is a Pro feature.",
-      "Learn More"
-    ).then((choice) => {
-      if (choice === "Learn More") {
-        const panel = getSettingsPanel();
-        if (panel) panel.createOrShow(context.extensionUri, context);
-      }
-    });
-    return;
-  }
   const dontShowAgain = context.globalState.get(BACKGROUND_DONT_SHOW_KEY, false);
   if (!dontShowAgain && !backgroundModeEnabled) {
     const choice = await vscode.window.showInformationMessage(
@@ -5910,23 +5880,7 @@ function updateStatusBar() {
   }
 }
 async function verifyLicense(context) {
-  const userId = context.globalState.get("auto-accept-userId");
-  if (!userId) return false;
-  return new Promise((resolve) => {
-    const https = require("https");
-    https.get(`${LICENSE_API}/check-license?userId=${userId}`, (res) => {
-      let data = "";
-      res.on("data", (chunk) => data += chunk);
-      res.on("end", () => {
-        try {
-          const json = JSON.parse(data);
-          resolve(json.isPro === true);
-        } catch (e) {
-          resolve(false);
-        }
-      });
-    }).on("error", () => resolve(false));
-  });
+  return true;
 }
 async function handleProActivation(context) {
   log("Pro Activation: Starting verification process...");

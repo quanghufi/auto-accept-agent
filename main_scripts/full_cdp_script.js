@@ -157,7 +157,7 @@
                     currentMode: null,
                     startTimes: {},
                     bannedCommands: [],
-                    isPro: false,
+                    isPro: true, // UNLOCKED
                     stats: createDefaultStats()
                 };
                 log('[Analytics] State initialized');
@@ -291,9 +291,9 @@
     const OVERLAY_ID = '__autoAcceptBgOverlay';
     const STYLE_ID = '__autoAcceptBgStyles';
     const STYLES = `
-        #__autoAcceptBgOverlay { position: fixed; background: rgba(0, 0, 0, 0.98); z-index: 2147483647; font-family: sans-serif; color: #fff; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: none; opacity: 0; transition: opacity 0.3s; }
+        #__autoAcceptBgOverlay { position: fixed; background: rgba(0, 0, 0, 0.15); z-index: 2147483647; font-family: sans-serif; color: #fff; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: none; opacity: 0; transition: opacity 0.3s; }
         #__autoAcceptBgOverlay.visible { opacity: 1; }
-        .aab-slot { margin-bottom: 12px; width: 80%; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; }
+        .aab-slot { margin-bottom: 12px; width: 80%; padding: 8px; background: rgba(0,0,0,0.6); border-radius: 4px; }
         .aab-header { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; }
         .aab-progress-track { height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; }
         .aab-progress-fill { height: 100%; width: 20%; background: #6b7280; transition: width 0.3s, background 0.3s; }
@@ -646,11 +646,11 @@
     function isAcceptButton(el) {
         const text = (el.textContent || "").trim().toLowerCase();
         if (text.length === 0 || text.length > 50) return false;
-        
+
         // Reject dropdown menu items (these appear in Antigravity's permission dropdown)
         const dropdownPatterns = ['always run', 'always allow', 'always reject', 'ask me', 'never'];
         if (dropdownPatterns.some(p => text.includes(p))) return false;
-        
+
         const patterns = ['accept', 'run', 'retry', 'apply', 'execute', 'confirm', 'allow once', 'allow'];
         const rejects = ['skip', 'reject', 'cancel', 'close', 'refine'];
         if (rejects.some(r => text.includes(r))) return false;

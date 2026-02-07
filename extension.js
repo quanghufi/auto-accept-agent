@@ -29,7 +29,7 @@ const HEARTBEAT_KEY = 'auto-accept-instance-heartbeat';
 const INSTANCE_ID = Math.random().toString(36).substring(7);
 
 let isEnabled = false;
-let isPro = false;
+let isPro = true; // UNLOCKED: Force Pro
 let isLockedOut = false; // Local tracking
 let pollFrequency = 2000; // Default for Free
 let bannedCommands = []; // List of command patterns to block
@@ -108,7 +108,7 @@ async function activate(context) {
     try {
         // 1. Initialize State
         isEnabled = context.globalState.get(GLOBAL_STATE_KEY, false);
-        isPro = context.globalState.get(PRO_STATE_KEY, false);
+        isPro = true; // UNLOCKED: Always Pro
 
         // Load frequency
         if (isPro) {
@@ -137,27 +137,10 @@ async function activate(context) {
         bannedCommands = context.globalState.get(BANNED_COMMANDS_KEY, defaultBannedCommands);
 
 
-        // 1.5 Verify License Background Check
-        verifyLicense(context).then(isValid => {
-            if (isPro !== isValid) {
-                isPro = isValid;
-                context.globalState.update(PRO_STATE_KEY, isValid);
-                log(`License re-verification: Updated Pro status to ${isValid}`);
-
-                if (cdpHandler && cdpHandler.setProStatus) {
-                    cdpHandler.setProStatus(isValid);
-                }
-
-                if (!isValid) {
-                    pollFrequency = 300; // Downgrade speed
-                    if (backgroundModeEnabled) {
-                        // Optional: Disable background mode visual toggle if desired, 
-                        // but logic gate handles it.
-                    }
-                }
-                updateStatusBar();
-            }
-        });
+        // 1.5 UNLOCKED: Skip license verification, always Pro
+        isPro = true;
+        context.globalState.update(PRO_STATE_KEY, true);
+        log('License check bypassed - Pro unlocked');
 
         currentIDE = detectIDE();
 
@@ -378,11 +361,7 @@ async function handleFrequencyUpdate(context, freq) {
 }
 
 async function handleBannedCommandsUpdate(context, commands) {
-    // Only Pro users can customize the banned list
-    if (!isPro) {
-        log('Banned commands customization requires Pro');
-        return;
-    }
+    // UNLOCKED: All users can customize banned list
     bannedCommands = Array.isArray(commands) ? commands : [];
     await context.globalState.update(BANNED_COMMANDS_KEY, bannedCommands);
     log(`Banned commands updated: ${bannedCommands.length} patterns`);
@@ -397,20 +376,7 @@ async function handleBannedCommandsUpdate(context, commands) {
 async function handleBackgroundToggle(context) {
     log('Background toggle clicked');
 
-    // Free tier: Show Pro message
-
-    if (!isPro) {
-        vscode.window.showInformationMessage(
-            'Background Mode is a Pro feature.',
-            'Learn More'
-        ).then(choice => {
-            if (choice === 'Learn More') {
-                const panel = getSettingsPanel();
-                if (panel) panel.createOrShow(context.extensionUri, context);
-            }
-        });
-        return;
-    }
+    // UNLOCKED: Background Mode available for all
 
     // Pro tier: Check if we should show first-time dialog
     const dontShowAgain = context.globalState.get(BACKGROUND_DONT_SHOW_KEY, false);
@@ -845,24 +811,8 @@ async function checkInstanceLock() {
 }
 
 async function verifyLicense(context) {
-    const userId = context.globalState.get('auto-accept-userId');
-    if (!userId) return false;
-
-    return new Promise((resolve) => {
-        const https = require('https');
-        https.get(`${LICENSE_API}/check-license?userId=${userId}`, (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                try {
-                    const json = JSON.parse(data);
-                    resolve(json.isPro === true);
-                } catch (e) {
-                    resolve(false);
-                }
-            });
-        }).on('error', () => resolve(false));
-    });
+    // UNLOCKED: Always return true
+    return true;
 }
 
 // Handle Pro activation (called from URI handler or command)
