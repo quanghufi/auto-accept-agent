@@ -7,7 +7,7 @@ Stop watching tabs. Auto Accept keeps every Antigravity conversation moving — 
 ---
 
 ![background mode](https://raw.githubusercontent.com/MunKhin/auto-accept-agent/master/media/background-mode.png)
-
+a
 ---
 
 ## Why Auto Accept?
