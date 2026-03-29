@@ -47,7 +47,8 @@ function isAcceptButton(el) {
         { pattern: 'retry', exact: true },
         { pattern: 'try again', exact: false },
         { pattern: 'confirm', exact: false },
-        { pattern: 'Allow Once', exact: true }
+        { pattern: 'allow once', exact: true },
+        { pattern: 'always allow', exact: false }
     ];
 
     // define the types that are not targetted
@@ -123,11 +124,22 @@ export function click(targetSelectors, panelSelector) {
         }
     }
 
-    // Generic selector matching
+    // Generic selector matching - scoped to panel if available
     for (const target of targets) {
         if (typeof target === 'string') {
             for (const doc of docs) {
-                const results = doc.querySelectorAll(target);
+                // If we have a panel selector, scope the search within the panel
+                // This prevents matching buttons in diff/editor views
+                let searchRoot = doc;
+                if (panelSelector) {
+                    const panel = doc.querySelector(panelSelector);
+                    if (panel) {
+                        searchRoot = panel;
+                    } else {
+                        continue; // Panel not found in this doc — skip to avoid clicking diff/editor buttons
+                    }
+                }
+                const results = searchRoot.querySelectorAll(target);
 
                 results.forEach(el => discoveredElements.push(el));
             }

@@ -643,6 +643,37 @@
     }
 
     // --- 4. CLICKING LOGIC ---
+
+    /**
+     * Check if an element is inside a diff/editor view (NOT the agent chat panel).
+     * Buttons inside diff views should NOT be auto-clicked because they control
+     * file edit acceptance, which must be handled by the AI agent workflow.
+     */
+    function isInsideDiffOrEditorView(el) {
+        let current = el;
+        while (current) {
+            // Check for common diff/editor view containers
+            const id = current.id || '';
+            const cls = current.className || '';
+            const clsStr = typeof cls === 'string' ? cls : '';
+
+            // Antigravity/VS Code diff editor identifiers
+            if (id.includes('editor') || id.includes('diff')) return true;
+            if (clsStr.includes('diff-editor') || clsStr.includes('merge-editor')) return true;
+            if (clsStr.includes('monaco-editor') || clsStr.includes('editor-instance')) return true;
+            if (clsStr.includes('inline-chat') || clsStr.includes('editor-widget')) return true;
+
+            // VS Code workbench editor part (the main editor area, not sidebar)
+            if (id === 'workbench.parts.editor') return true;
+
+            // Stop climbing if we hit the agent panel (this is where we WANT to click)
+            if (id.includes('agentPanel') || id.includes('auxiliarybar')) return false;
+
+            current = current.parentElement;
+        }
+        return false;
+    }
+
     function isAcceptButton(el) {
         const text = (el.textContent || "").trim().toLowerCase();
         if (text.length === 0 || text.length > 50) return false;
@@ -650,6 +681,13 @@
         const rejects = ['skip', 'reject', 'cancel', 'close', 'refine'];
         if (rejects.some(r => text.includes(r))) return false;
         if (!patterns.some(p => text.includes(p))) return false;
+
+        // CRITICAL: Skip buttons inside diff/editor views
+        // These are file edit accept buttons that should NOT be auto-clicked
+        if (isInsideDiffOrEditorView(el)) {
+            log(`[Skip] Button "${text}" is inside diff/editor view - not auto-clicking`);
+            return false;
+        }
 
         // Check if this is a command execution button by looking for "run command" or similar
         const isCommandButton = text.includes('run command') || text.includes('execute') || text.includes('run');
@@ -739,6 +777,70 @@
         return verified;
     }
 
+    /**
+     * Scan and click dialog buttons that exist OUTSIDE the agent panel:
+     * - Permission dialogs: "Allow Once", "Always Allow", "Allow"
+     * - Command approval: "Run", "Accept", "Retry" (only when paired with "Reject")
+     */
+    async function clickDialogButtons() {
+        const allButtons = queryAll('button');
+        let clicked = 0;
+
+        // Permission buttons - exact match, always safe to click
+        const permissionTexts = ['allow once', 'always allow', 'allow'];
+        // Command approval buttons - need sibling check to avoid false positives
+        const approvalTexts = ['run', 'accept', 'retry'];
+
+        for (const el of allButtons) {
+            const text = (el.textContent || '').trim().toLowerCase();
+            // Strip keyboard shortcut suffixes like "Alt+i", "Ctrl+Enter"
+            const cleanText = text.replace(/\s*(alt|ctrl|shift|cmd)\+\S+$/i, '').trim();
+
+            let shouldClick = false;
+
+            if (permissionTexts.includes(cleanText)) {
+                shouldClick = true;
+            } else if (approvalTexts.includes(cleanText)) {
+                // Only click Run/Accept/Retry if there's a "Reject" sibling
+                // This confirms it's a command approval dialog, not a random button
+                const siblings = el.parentElement ? Array.from(el.parentElement.querySelectorAll('button')) : [];
+                const hasReject = siblings.some(s => {
+                    const st = (s.textContent || '').trim().toLowerCase();
+                    return st.includes('reject') || st.includes('deny') || st.includes('cancel');
+                });
+                if (hasReject) shouldClick = true;
+            }
+
+            if (!shouldClick) continue;
+
+            // Skip if inside diff/editor view
+            if (isInsideDiffOrEditorView(el)) continue;
+            // Check visible and clickable
+            const style = window.getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            if (style.display === 'none' || rect.width === 0 || el.disabled) continue;
+
+            // For command buttons, check banned commands
+            if (approvalTexts.includes(cleanText)) {
+                const nearbyText = findNearbyCommandText(el);
+                if (isCommandBanned(nearbyText)) {
+                    log(`[Dialog] Skipping banned command button: "${el.textContent.trim()}"`);
+                    continue;
+                }
+            }
+
+            log(`[Dialog] Clicking: "${el.textContent.trim()}"`);
+            el.dispatchEvent(new MouseEvent('click', { view: window, bubbles: true, cancelable: true }));
+            const disappeared = await waitForDisappear(el);
+            if (disappeared) {
+                Analytics.trackClick(el.textContent.trim(), log);
+                clicked++;
+                log(`[Dialog] Click verified`);
+            }
+        }
+        return clicked;
+    }
+
     // --- 4. POLL LOOPS ---
     async function cursorLoop(sid) {
         log('[Loop] cursorLoop STARTED');
@@ -816,12 +918,20 @@
             // Only click if there's NO completion badge (conversation is still working)
             let clicked = 0;
             if (!hasBadge) {
-                // Click accept/run buttons (Antigravity specific selectors)
-                clicked = await performClick(['.bg-ide-button-background']);
+                // Click accept/run buttons - scoped to agent panel only
+                // Avoids clicking file diff Accept buttons in the editor area
+                clicked = await performClick([
+                    '#antigravity\\.agentPanel .bg-ide-button-background',
+                    '#antigravity\\.agentPanel button'
+                ]);
                 log(`[Loop] Cycle ${cycle}: Clicked ${clicked} accept buttons`);
             } else {
                 log(`[Loop] Cycle ${cycle}: Skipping clicks - conversation is DONE (has badge)`);
             }
+
+            // Always scan for dialog buttons (outside agent panel)
+            const dialogClicked = await clickDialogButtons();
+            if (dialogClicked > 0) log(`[Loop] Cycle ${cycle}: Clicked ${dialogClicked} dialog buttons`);
 
             await new Promise(r => setTimeout(r, 800));
 
@@ -977,10 +1087,19 @@
                 else antigravityLoop(sid);
             } else {
                 hideOverlay();
-                log(`Starting static poll loop...`);
+                log(`Starting static poll loop (IDE: ${ide})...`);
                 (async function staticLoop() {
+                    // Use IDE-specific selectors to avoid clicking buttons in wrong contexts
+                    const pollSelectors = ide === 'antigravity'
+                        ? ['#antigravity\\.agentPanel button.bg-ide-button-background',
+                           '#antigravity\\.agentPanel button']
+                        : ['button', '[class*="button"]', '[class*="anysphere"]'];
+                    log(`[Poll] Using selectors for ${ide}: ${pollSelectors.join(', ')}`);
+
                     while (state.isRunning && state.sessionID === sid) {
-                        performClick(['button', '[class*="button"]', '[class*="anysphere"]']);
+                        performClick(pollSelectors);
+                        // Also scan for dialog buttons (outside agent panel)
+                        clickDialogButtons();
                         await new Promise(r => setTimeout(r, config.pollInterval || 1000));
                     }
                 })();
